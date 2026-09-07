@@ -1,0 +1,192 @@
+name: Ad hoc build
+
+# Builds a signed ad hoc .ipa and publishes it with an over-the-air install page,
+# so a registered device installs straight from Safari — no TestFlight, no review.
+#
+# Required repository secrets (see docs/AD_HOC_DISTRIBUTION.md):
+#   BUILD_CERTIFICATE_BASE64      base64 of an Apple Distribution .p12
+#   P12_PASSWORD                  password for that .p12
+#   PROVISIONING_PROFILE_BASE64   base64 of the Ad Hoc .mobileprovision
+#
+# The bundle id and team id are read out of the profile, so there is nothing else
+# to keep in sync.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: What is in this build
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: adhoc
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Archive & export
+    runs-on: macos-15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the signing secrets are present
+        env:
+          CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          PROFILE: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          missing=""
+          [ -n "$CERT" ] || missing="$missing BUILD_CERTIFICATE_BASE64"
+          [ -n "$PROFILE" ] || missing="$missing PROVISIONING_PROFILE_BASE64"
+          if [ -n "$missing" ]; then
+            echo "Missing secrets:$missing" >&2
+            echo "See docs/AD_HOC_DISTRIBUTION.md for how to create them." >&2
+            exit 1
+          fi
+
+      - name: Select the newest installed Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Work out the version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            TAG="${GITHUB_REF_NAME}"
+          else
+            VERSION="0.0.${GITHUB_RUN_NUMBER}"
+            TAG="build-${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Import certificate and provisioning profile
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: scripts/ci_setup_signing.sh
+
+      - name: Configure the build for manual signing
+        run: |
+          cat > Config/Local.xcconfig <<CFG
+          SNAPPY_BUNDLE_ID = ${PROFILE_BUNDLE_ID}
+          SNAPPY_TEAM_ID = ${PROFILE_TEAM_ID}
+          SNAPPY_CODE_SIGN_STYLE = Manual
+          PROVISIONING_PROFILE_SPECIFIER = ${PROFILE_UUID}
+          CODE_SIGN_IDENTITY = Apple Distribution
+          MARKETING_VERSION = ${{ steps.version.outputs.version }}
+          CURRENT_PROJECT_VERSION = ${{ steps.version.outputs.build }}
+          CFG
+          cat Config/Local.xcconfig
+
+      - name: Generate the Xcode project
+        run: xcodegen generate
+
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Snappy.xcodeproj \
+            -scheme Snappy \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Snappy.xcarchive \
+            -allowProvisioningUpdates NO
+
+      - name: Export the .ipa
+        run: |
+          scripts/make_export_options.sh \
+            "$PROFILE_TEAM_ID" "$PROFILE_BUNDLE_ID" "$PROFILE_UUID" build/ExportOptions.plist
+          xcodebuild -exportArchive \
+            -archivePath build/Snappy.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export
+          ls -lh build/export
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        with:
+          # Turns Pages on the first time, so the only manual setup is the secrets.
+          enablement: true
+
+      - name: Assemble the install site
+        env:
+          NOTES: ${{ github.event.inputs.notes }}
+        run: |
+          BASE_URL="${{ steps.pages.outputs.base_url }}"
+          mkdir -p site
+          cp build/export/*.ipa site/Snappy.ipa
+
+          scripts/make_ota_manifest.sh \
+            "$PROFILE_BUNDLE_ID" \
+            "${{ steps.version.outputs.version }}" \
+            "Snappy" \
+            "${BASE_URL}/Snappy.ipa" \
+            site/manifest.plist
+
+          scripts/make_install_page.sh \
+            site \
+            "${{ steps.version.outputs.version }}" \
+            "${{ steps.version.outputs.build }}" \
+            "${BASE_URL}/manifest.plist" \
+            "${BASE_URL}/Snappy.ipa" \
+            "$NOTES"
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Publish to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Publish a release with the .ipa
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ github.event.inputs.notes }}
+        run: |
+          BASE_URL="${{ steps.pages.outputs.base_url }}"
+          BODY=$(cat <<BODY
+          Ad hoc build ${{ steps.version.outputs.version }} (${{ steps.version.outputs.build }}).
+
+          **[Install on an iPhone](${BASE_URL})** — open that page in Safari on the device.
+          The device UDID has to be in the ad hoc provisioning profile first.
+
+          ${NOTES}
+          BODY
+          )
+          gh release create "${{ steps.version.outputs.tag }}" \
+            site/Snappy.ipa site/manifest.plist \
+            --title "Snappy ${{ steps.version.outputs.version }}" \
+            --notes "$BODY" \
+            --prerelease
+
+      - name: Summary
+        run: |
+          {
+            echo "### Snappy ${{ steps.version.outputs.version }}"
+            echo ""
+            echo "Install page: ${{ steps.pages.outputs.base_url }}"
+            echo ""
+            echo "Open it in Safari on a device whose UDID is in the profile."
+          } >> "$GITHUB_STEP_SUMMARY"

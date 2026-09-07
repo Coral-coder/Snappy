@@ -1,0 +1,16 @@
+// Snappy build configuration.
+//
+// Edit these two values (or create Config/Local.xcconfig, which is gitignored
+// and included last, so it wins) before building to a device.
+
+SNAPPY_BUNDLE_ID = com.example.snappy
+SNAPPY_TEAM_ID =
+SNAPPY_CODE_SIGN_STYLE = Automatic
+
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// Set to SNAP_CAMERA_KIT once the Camera Kit SDK is linked. See docs/CAMERA_KIT.md.
+SNAPPY_EXTRA_SWIFT_FLAGS =
+
+#include? "Local.xcconfig"
