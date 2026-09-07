@@ -101,8 +101,18 @@ struct CoreImageFilterProvider: FilterProvider {
         return names
     }
 
+    /// A filter is usable in the viewfinder only if it takes one image, can fill in
+    /// the rest of its inputs, *and* gives back an image at least as big as the one
+    /// it was handed. That last check is not pedantry: filters like
+    /// `CISaliencyMapFilter` satisfy every attribute rule and then return a fixed
+    /// 64x64 analysis map, which would break both the preview and the recorder.
     static func isViewfinderCompatible(_ name: String) -> Bool {
         guard !denyList.contains(name), let filter = CIFilter(name: name) else { return false }
+        guard hasUsableInputs(filter) else { return false }
+        return producesAFullFrame(filter)
+    }
+
+    private static func hasUsableInputs(_ filter: CIFilter) -> Bool {
         let attributes = filter.attributes
         var takesInputImage = false
 
@@ -131,6 +141,20 @@ struct CoreImageFilterProvider: FilterProvider {
         }
         return takesInputImage
     }
+
+    /// Runs the filter over a probe frame and checks the extent it reports. Extents
+    /// are computed lazily by Core Image, so nothing is actually rendered here.
+    private static func producesAFullFrame(_ filter: CIFilter) -> Bool {
+        let probeExtent = CGRect(x: 0, y: 0, width: 640, height: 480)
+        let probe = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5)).cropped(to: probeExtent)
+
+        filter.setValue(probe, forKey: kCIInputImageKey)
+        CoreImageLens.configureGeometry(filter, inputKeys: Set(filter.inputKeys), extent: probeExtent)
+
+        guard let output = filter.outputImage else { return false }
+        // An infinite extent is fine — the lens crops it back to the frame.
+        return output.extent.contains(probeExtent)
+    }
 }
 
 /// Wraps one system `CIFilter` as a lens.
@@ -157,7 +181,18 @@ final class CoreImageLens: LensEffect {
     func apply(to image: CIImage, context: EffectContext) -> CIImage {
         let extent = image.extent
         filter.setValue(image, forKey: kCIInputImageKey)
+        Self.configureGeometry(filter, inputKeys: inputKeys, extent: extent)
 
+        guard let output = filter.outputImage else { return image }
+        // Several filters (blurs, distortions) return an infinite or grown extent.
+        // Clamp back to the frame so the recorder and the preview agree.
+        return output.cropped(to: extent)
+    }
+
+    /// Fills in the inputs that depend on the size of the frame rather than on
+    /// taste. Shared with the compatibility probe so a filter is vetted with
+    /// exactly the parameters it will be used with.
+    static func configureGeometry(_ filter: CIFilter, inputKeys: Set<String>, extent: CGRect) {
         if inputKeys.contains("inputCenter") {
             filter.setValue(CIVector(x: extent.midX, y: extent.midY), forKey: "inputCenter")
         }
@@ -180,11 +215,6 @@ final class CoreImageLens: LensEffect {
         if inputKeys.contains("inputScale"), filter.name == "CIBumpDistortion" {
             filter.setValue(0.5, forKey: "inputScale")
         }
-
-        guard let output = filter.outputImage else { return image }
-        // Several filters (blurs, distortions) return an infinite or grown extent.
-        // Clamp back to the frame so the recorder and the preview agree.
-        return output.cropped(to: extent)
     }
 
     /// Core Image ships localized display names; fall back to de-camel-casing.

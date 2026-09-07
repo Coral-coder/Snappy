@@ -48,6 +48,13 @@ final class FilterCatalogTests: XCTestCase {
         XCTAssertFalse(CoreImageFilterProvider.isViewfinderCompatible("CIBlendWithMask"))
     }
 
+    func testFiltersThatDoNotReturnAFullFrameAreRejected() {
+        // CISaliencyMapFilter satisfies every attribute rule and then hands back a
+        // fixed 64x64 analysis map. It reached the carousel once; it should not again.
+        XCTAssertFalse(CoreImageFilterProvider.isViewfinderCompatible("CISaliencyMapFilter"))
+        XCTAssertFalse(CoreImageFilterProvider.availableFilterNames().contains("CISaliencyMapFilter"))
+    }
+
     /// Every lens has to return something renderable at the frame's own extent,
     /// otherwise the recorder writes garbage or the preview goes black.
     func testEveryLensPreservesTheFrameExtent() throws {
