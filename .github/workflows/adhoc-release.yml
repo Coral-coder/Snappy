@@ -53,7 +53,7 @@ jobs:
           [ -n "$PROFILE" ] || missing="$missing PROVISIONING_PROFILE_BASE64"
           if [ -n "$missing" ]; then
             echo "Missing secrets:$missing" >&2
-            echo "See docs/AD_HOC_DISTRIBUTION.md for how to create them." >&2
+            echo "Run scripts/setup_signing.sh once to create and upload them." >&2
             exit 1
           fi
 

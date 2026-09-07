@@ -21,3 +21,10 @@ xcuserdata/
 
 # macOS
 .DS_Store
+
+# Signing material produced by scripts/setup_signing.sh — never commit this.
+.signing/
+*.p12
+*.cer
+*.mobileprovision
+*.certSigningRequest

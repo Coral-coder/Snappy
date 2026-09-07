@@ -45,7 +45,18 @@ SNAPPY_TEAM_ID = ABCDE12345
 
 ## Getting it onto a phone, without TestFlight
 
-Bump `VERSION` on `main` and push. GitHub Actions builds a signed ad hoc `.ipa`,
+Once, to set up signing (Apple only lets your own account create a signing
+certificate, so this part cannot be automated away entirely — but it is one
+command and three clicks):
+
+```bash
+scripts/setup_signing.sh
+```
+
+It generates the key, walks you through the three Apple pages, builds the `.p12`
+and uploads all three GitHub secrets for you.
+
+After that, bump `VERSION` on `main` and push. GitHub Actions builds a signed ad hoc `.ipa`,
 publishes an over-the-air install page, and attaches the build to a Release
 (tagging it for you):
 

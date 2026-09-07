@@ -23,7 +23,26 @@ GitHub Actions (.github/workflows/adhoc-release.yml)
 Open the Pages URL in Safari on the iPhone → Install
 ```
 
-## One-time setup
+## One-time setup, the short way
+
+```bash
+scripts/setup_signing.sh
+```
+
+That generates the private key and CSR locally, points you at the three Apple
+pages that need a human (certificate, device, profile), builds the `.p12`, and
+uploads `BUILD_CERTIFICATE_BASE64`, `P12_PASSWORD` and
+`PROVISIONING_PROFILE_BASE64` with `gh` so you never open the settings UI. If you
+already have a `.p12` and an Ad Hoc `.mobileprovision`, hand them over and it
+skips to the upload:
+
+```bash
+scripts/setup_signing.sh ~/Downloads/Certificates.p12 ~/Downloads/Snappy.mobileprovision
+```
+
+The rest of this section is the same thing done by hand.
+
+## One-time setup, by hand
 
 ### 1. Register the devices
 
