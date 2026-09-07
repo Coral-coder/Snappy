@@ -11,9 +11,12 @@ name: Ad hoc build
 # The bundle id and team id are read out of the profile, so there is nothing else
 # to keep in sync.
 
+# Releasing is one edit: bump VERSION on main and push. The workflow tags the
+# release for you, so there is no separate `git tag` step to remember.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: ['VERSION']
   workflow_dispatch:
     inputs:
       notes:
@@ -66,16 +69,14 @@ jobs:
       - name: Work out the version
         id: version
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            TAG="${GITHUB_REF_NAME}"
-          else
-            VERSION="0.0.${GITHUB_RUN_NUMBER}"
-            TAG="build-${GITHUB_RUN_NUMBER}"
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          if [ -z "$VERSION" ]; then
+            echo 'VERSION is empty' >&2
+            exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "build=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Import certificate and provisioning profile
         env:
@@ -175,11 +176,20 @@ jobs:
           ${NOTES}
           BODY
           )
-          gh release create "${{ steps.version.outputs.tag }}" \
-            site/Snappy.ipa site/manifest.plist \
-            --title "Snappy ${{ steps.version.outputs.version }}" \
-            --notes "$BODY" \
-            --prerelease
+          TAG="${{ steps.version.outputs.tag }}"
+          # Re-running a build for the same VERSION refreshes the release rather
+          # than failing on the existing tag.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --notes "$BODY"
+            gh release upload "$TAG" site/Snappy.ipa site/manifest.plist --clobber
+          else
+            gh release create "$TAG" \
+              site/Snappy.ipa site/manifest.plist \
+              --target "$GITHUB_SHA" \
+              --title "Snappy ${{ steps.version.outputs.version }}" \
+              --notes "$BODY" \
+              --prerelease
+          fi
 
       - name: Summary
         run: |

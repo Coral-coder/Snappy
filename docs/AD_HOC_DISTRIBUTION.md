@@ -9,7 +9,7 @@ every device that will run the build must have its UDID in the ad hoc
 provisioning profile (up to 100 iPhones per membership year).
 
 ```
-git tag v0.1.0 && git push --tags
+echo 0.1.1 > VERSION && git commit -am "0.1.1" && git push
         │
         ▼
 GitHub Actions (.github/workflows/adhoc-release.yml)
@@ -79,9 +79,11 @@ GitHub Actions**.
 
 ## Making a build
 
-- **Tag it:** `git tag v0.2.0 && git push origin v0.2.0`
+- **Bump the version:** edit `VERSION`, commit, push to `main`. That file is the
+  release trigger; the workflow tags `v<VERSION>` and cuts the Release itself.
 - **Or run it by hand:** Actions → *Ad hoc build* → Run workflow, with optional
-  release notes.
+  release notes. Re-running for a version that already shipped refreshes that
+  release in place instead of failing on the tag.
 
 When it finishes, the run summary and the Release both link to the install page.
 Open that page **in Safari on the iPhone** (not on a Mac, and not in an in-app

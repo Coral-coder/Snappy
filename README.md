@@ -45,11 +45,12 @@ SNAPPY_TEAM_ID = ABCDE12345
 
 ## Getting it onto a phone, without TestFlight
 
-Tag a commit and GitHub Actions builds a signed ad hoc `.ipa`, publishes an
-over-the-air install page, and attaches the build to a Release:
+Bump `VERSION` on `main` and push. GitHub Actions builds a signed ad hoc `.ipa`,
+publishes an over-the-air install page, and attaches the build to a Release
+(tagging it for you):
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+echo 0.1.1 > VERSION && git commit -am "0.1.1" && git push
 ```
 
 Open the install page in Safari on the iPhone and tap Install. The device's UDID
