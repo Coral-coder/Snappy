@@ -1,5 +1,6 @@
 import CoreImage
 import MetalKit
+import SwiftUI
 import UIKit
 
 /// Draws the filtered `CIImage` straight onto a Metal drawable.
