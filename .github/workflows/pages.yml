@@ -1,7 +1,15 @@
 name: Pages
 
-# Publishes the web app. Every push that touches web/ redeploys it, so the
-# home-screen app updates itself the next time it is opened.
+# Publishes the web app to GitHub Pages. Every push that touches web/ redeploys,
+# so the home-screen app picks up the new build the next time it is opened.
+#
+# This deploys by pushing the site to the `gh-pages` branch rather than using the
+# Pages deployment API, because creating a Pages site through the API needs
+# permissions the workflow token does not have on a repository that has never
+# had Pages turned on. Pushing a branch always works.
+#
+# If Pages is not serving yet: Settings → Pages → Source → "Deploy from a
+# branch" → gh-pages / (root). That is a one-time switch.
 
 on:
   push:
@@ -10,12 +18,12 @@ on:
       - 'web/**'
       - '.github/workflows/pages.yml'
       - 'scripts/check_web.mjs'
+      - 'scripts/test_shaders.mjs'
+      - 'scripts/test_app.mjs'
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -23,11 +31,8 @@ concurrency:
 
 jobs:
   deploy:
-    name: Build & publish
+    name: Test & publish
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,31 +56,39 @@ jobs:
       - name: Drive the app with a fake camera
         run: node scripts/test_app.mjs
 
-      - name: Stamp this commit into the cache name
-        # Changing the cache name is what makes a returning phone pick up the new
-        # build instead of serving the old one out of the service worker.
+      - name: Assemble the site
         run: |
-          sed -i "s/const VERSION = 'snappy-v1';/const VERSION = 'snappy-${GITHUB_SHA::12}';/" web/sw.js
-          grep -n "const VERSION" web/sw.js
+          mkdir -p site
+          cp -a web/. site/
+          # Pages runs Jekyll by default, which would ignore files like _*.
+          touch site/.nojekyll
+          # Changing the service worker's cache name is what makes a returning
+          # phone pick up this build instead of serving the old one forever.
+          sed -i "s/const VERSION = 'snappy-v1';/const VERSION = 'snappy-${GITHUB_SHA::12}';/" site/sw.js
+          grep -n "const VERSION" site/sw.js
 
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: web
-
-      - name: Publish
-        id: deploy
-        uses: actions/deploy-pages@v4
-
-      - name: Summary
+      - name: Publish to gh-pages
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          cd site
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy ${GITHUB_SHA::12}"
+          # The deploy branch is a snapshot, not history: one commit, force-pushed.
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" gh-pages
+
+      - name: Where it lives
+        run: |
+          URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
           {
             echo "### Snappy web app"
             echo ""
-            echo "${{ steps.deploy.outputs.page_url }}"
+            echo "$URL"
             echo ""
-            echo "Open it in Safari on the iPhone, then Share → Add to Home Screen."
+            echo "Open that in Safari on the iPhone, then Share → Add to Home Screen."
+            echo ""
+            echo "Not loading? Settings → Pages → Source → Deploy from a branch → gh-pages / (root)."
           } >> "$GITHUB_STEP_SUMMARY"
