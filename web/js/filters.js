@@ -69,6 +69,66 @@ export const FILTERS = [
     body: `vec3 snappy(vec2 uv) { return tex(uv); }`
   },
   {
+    id: 'soften',
+    name: 'Soften',
+    glyph: '◍',
+    body: `vec3 snappy(vec2 uv) {
+      vec3 src = tex(uv);
+
+      // Edge-aware blur, three rings. A sample is weighted by how close it is
+      // in colour to the centre, so skin averages out while eyes, lashes, lips
+      // and the outline of the face stay put. The colour sigma is deliberately
+      // loose: tighten it and the filter starts protecting the very grain it
+      // is supposed to remove.
+      vec2 step = (u_res.y / 720.0) * 2.2 / u_res;
+      vec3 sum = src;
+      float total = 1.0;
+      for (int i = 0; i < 18; i++) {
+        float angle = float(i) * 0.3491;
+        float ring = i < 6 ? 1.0 : (i < 12 ? 2.0 : 3.1);
+        vec3 s = tex(uv + vec2(cos(angle), sin(angle)) * ring * step);
+        vec3 d = s - src;
+        float w = exp(-dot(d, d) * 11.0);
+        sum += s * w;
+        total += w;
+      }
+      vec3 blurred = sum / total;
+
+      // A little of the fine detail goes back, or skin reads as plastic.
+      vec3 result = blurred + (src - blurred) * 0.13;
+
+      // The lift and the touch of warmth are most of why these filters flatter.
+      result = clamp(result * 1.045 + vec3(0.014, 0.007, 0.0), 0.0, 1.0);
+      return mix(src, result, 0.95);
+    }`
+  },
+  {
+    id: 'glow',
+    name: 'Glow',
+    glyph: '◉',
+    body: `vec3 snappy(vec2 uv) {
+      vec3 src = tex(uv);
+
+      // Soft focus, not skin smoothing: the blur is deliberately not
+      // edge-aware, because bleeding across edges is the whole look. It is
+      // screened back over the original, which lifts midtones and hides
+      // texture without washing the frame out.
+      vec2 step = (u_res.y / 720.0) * 4.2 / u_res;
+      vec3 sum = src;
+      for (int i = 0; i < 18; i++) {
+        float angle = float(i) * 0.3491 + 0.26;
+        float ring = i < 6 ? 1.0 : (i < 12 ? 2.1 : 3.3);
+        sum += tex(uv + vec2(cos(angle), sin(angle)) * ring * step);
+      }
+      vec3 blurred = sum / 19.0;
+
+      vec3 screened = 1.0 - (1.0 - src) * (1.0 - blurred * 0.5);
+      vec3 result = mix(blurred, screened, 0.55);
+      result = clamp(result * 1.02 + vec3(0.02, 0.012, 0.004), 0.0, 1.0);
+      return mix(src, result, 0.85);
+    }`
+  },
+  {
     id: 'noir',
     name: 'Noir',
     glyph: '◐',

@@ -14,7 +14,7 @@ There are two builds in this repository.
 | --- | --- | --- |
 | Install | Open the link, Add to Home Screen | Signed `.ipa`, ad hoc over the air |
 | Needs an Apple Developer account | No | Yes, $99/yr |
-| Filters | 30 WebGL lenses | ~60 Core Image lenses + face lenses |
+| Filters | 32 WebGL lenses | ~60 Core Image lenses + face lenses |
 | Where it runs | Any modern phone or desktop | iPhone, iOS 17+ |
 | Source | [`web/`](web) | [`Snappy/`](Snappy) |
 
@@ -46,9 +46,13 @@ there is no server in this app to send anything to.
 
 ## What the web app does
 
-- **30 lenses**, compiled as WebGL fragment shaders and swiped through like a
-  carousel: Noir, Thermal, X-Ray, Comic, Crystal, Hex, Halftone, Kaleido, Twirl,
-  Bulge, Glitch, Duotone, Chrome and the rest.
+- **Soften** — the one people actually reach for: an edge-aware blur that takes
+  about two thirds of the texture out of skin while eyes, lashes and lips stay
+  sharp, with a small lift and a touch of warmth. **Glow** is its soft-focus
+  sibling.
+- **25 shader lenses** in total, compiled as WebGL fragment shaders and swiped
+  through like a carousel: Noir, Thermal, X-Ray, Comic, Crystal, Hex, Halftone,
+  Kaleido, Twirl, Bulge, Glitch, Duotone, Chrome and the rest.
 - **7 face lenses** — Big Eyes, Alien, Squish, Shades, Puppy, Royalty, Smitten —
   tracked with MediaPipe face landmarks.
 - **Photos at full camera resolution**, not screen resolution: the shutter

@@ -30,6 +30,18 @@ the draw call to do this without the viewfinder flickering through a resize.
 
 ## Lenses
 
+`Soften` deserves a note, because it is the lens a filter camera is judged on
+and the one whose failure is silent. It is a cheap bilateral blur: three rings
+of samples, each weighted by how close it is in colour to the centre pixel, so
+flat areas average out while eyes, lashes, lips and the face's outline keep
+their contrast. The colour sigma is deliberately loose — tighten it and the
+filter starts protecting the very grain it exists to remove, which is exactly
+the bug the behaviour test in `scripts/test_shaders.mjs` guards against (it
+renders a noisy card with a hard edge and asserts the texture drops by half
+while the edge survives). A small fraction of the fine detail is mixed back so
+skin does not read as plastic, then a 4.5% lift and a trace of warmth, which is
+most of why these filters flatter.
+
 `filters.js` is the catalogue: each lens is a GLSL function body,
 `vec3 snappy(vec2 uv)`, that gets a shared prelude prepended (sampling helpers,
 luma, a Sobel operator, an aspect-corrected `warp()` used by the distortions).
@@ -55,7 +67,7 @@ MediaPipe's face landmarker. It is several megabytes, which is why it is:
 - **cached** — the service worker keeps the wasm and model, so it is a one-time
   download;
 - **optional** — if it fails to load, those seven lenses hide themselves and the
-  other twenty-three are unaffected.
+  rest are unaffected.
 
 Detection runs on every other frame; the previous result is reused in between.
 At 30fps that is invisible and roughly halves the cost.
