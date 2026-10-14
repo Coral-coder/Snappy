@@ -111,36 +111,74 @@ const report = await page.evaluate(async () => {
 
 // --- behaviour: a beauty filter that does nothing also compiles ------------
 //
-// Soften is the lens people reach for, and the failure mode is silent: tune the
-// colour sigma too tight and it protects the very grain it should average away,
-// leaving a filter that looks identical to None. So render a noisy test card
-// with a hard edge through it and measure both halves of the claim — texture
-// goes, edges stay.
+// Soften and Younger are the lenses this app gets judged on, and their failure
+// mode is silent: tune the colour sigma too tight and the filter protects the
+// very detail it exists to remove, leaving something indistinguishable from
+// None on a phone. So render two test cards and measure the actual claims —
+// skin texture and fine lines go, real edges stay.
 const behaviour = await page.evaluate(async () => {
   const { FILTERS, PRELUDE } = await import('./js/filters.js');
   const N = 720;
+  const SKIN = [226, 182, 152];
 
-  const source = document.createElement('canvas');
-  source.width = N;
-  source.height = N;
-  const sourceCtx = source.getContext('2d');
-  const image = sourceCtx.createImageData(N, N);
   let seed = 1;
   const random = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  for (let y = 0; y < N; y++) {
-    for (let x = 0; x < N; x++) {
-      const base = x < N / 2 ? 70 : 190;
-      const value = Math.max(0, Math.min(255, base + (random() - 0.5) * 60));
-      const i = (y * N + x) * 4;
-      image.data[i] = image.data[i + 1] = image.data[i + 2] = value;
-      image.data[i + 3] = 255;
+
+  // Card one: flat halves with heavy grain and one hard vertical edge.
+  const grainCard = document.createElement('canvas');
+  grainCard.width = grainCard.height = N;
+  {
+    const ctx = grainCard.getContext('2d');
+    const image = ctx.createImageData(N, N);
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const base = x < N / 2 ? 70 : 190;
+        const value = Math.max(0, Math.min(255, base + (random() - 0.5) * 60));
+        const i = (y * N + x) * 4;
+        image.data[i] = image.data[i + 1] = image.data[i + 2] = value;
+        image.data[i + 3] = 255;
+      }
     }
+    ctx.putImageData(image, 0, 0);
   }
-  sourceCtx.putImageData(image, 0, 0);
+
+  // Card two: skin tone, faint grain, thin dark lines standing in for fine
+  // lines, and one thick dark line standing in for a lash or a brow.
+  const LINE_ROWS = [120, 200, 280, 360, 440, 520];
+  const LASH_ROW = 620;
+  const lineCard = document.createElement('canvas');
+  lineCard.width = lineCard.height = N;
+  {
+    const ctx = lineCard.getContext('2d');
+    const image = ctx.createImageData(N, N);
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const noise = (random() - 0.5) * 16;
+        const i = (y * N + x) * 4;
+        image.data[i] = SKIN[0] + noise;
+        image.data[i + 1] = SKIN[1] + noise;
+        image.data[i + 2] = SKIN[2] + noise;
+        image.data[i + 3] = 255;
+      }
+    }
+    // Fine lines: two pixels tall, shallow. A lash: seven pixels, deep.
+    const paint = (row, thickness, drop) => {
+      for (let y = row; y < row + thickness; y++) {
+        for (let x = 60; x < N - 60; x++) {
+          const i = (y * N + x) * 4;
+          image.data[i] -= drop;
+          image.data[i + 1] -= drop * 0.95;
+          image.data[i + 2] -= drop * 0.9;
+        }
+      }
+    };
+    for (const row of LINE_ROWS) paint(row, 2, 30);
+    paint(LASH_ROW, 7, 140);
+    ctx.putImageData(image, 0, 0);
+  }
 
   const canvas = document.createElement('canvas');
-  canvas.width = N;
-  canvas.height = N;
+  canvas.width = canvas.height = N;
   const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
   if (!gl) return null;
 
@@ -156,13 +194,15 @@ const behaviour = await page.evaluate(async () => {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
 
   const buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
-  const render = (filter) => {
+  const render = (filter, card) => {
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, card);
+
     const fragment = `${PRELUDE}\n${filter.body}\nvoid main(){ gl_FragColor = vec4(snappy(v_uv), 1.0); }`;
     const vs = gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vs, VERTEX);
@@ -200,39 +240,61 @@ const behaviour = await page.evaluate(async () => {
     return pixels;
   };
 
-  // Texture, measured inside the flat left half only.
+  // readPixels gives rows bottom-up; convert a card row to a buffer row.
+  const rowOf = (y) => N - 1 - y;
+  const at = (pixels, x, y) => pixels[(rowOf(y) * N + x) * 4];
+
   const grain = (pixels) => {
     let sum = 0;
     let count = 0;
     for (let y = 100; y < N - 100; y += 2) {
       for (let x = 40; x < N / 2 - 60; x++) {
-        sum += Math.abs(pixels[(y * N + x) * 4] - pixels[(y * N + x + 1) * 4]);
+        sum += Math.abs(at(pixels, x, y) - at(pixels, x + 1, y));
         count++;
       }
     }
     return sum / count;
   };
-  // Contrast across the hard edge, which must survive the smoothing.
+
   const edge = (pixels) => {
     let left = 0;
     let right = 0;
     let count = 0;
     for (let y = 100; y < N - 100; y += 2) {
       for (let x = 40; x < N / 2 - 60; x++) {
-        left += pixels[(y * N + x) * 4];
-        right += pixels[(y * N + x + N / 2 + 20) * 4];
+        left += at(pixels, x, y);
+        right += at(pixels, x + N / 2 + 20, y);
         count++;
       }
     }
     return (right - left) / count;
   };
 
+  // How far a dark line still sits below the skin a few pixels above it.
+  const lineDepth = (pixels, row, thickness) => {
+    let sum = 0;
+    let count = 0;
+    for (let x = 120; x < N - 120; x += 3) {
+      const onLine = at(pixels, x, row + Math.floor(thickness / 2));
+      const around = (at(pixels, x, row - 14) + at(pixels, x, row + thickness + 14)) / 2;
+      sum += around - onLine;
+      count++;
+    }
+    return sum / count;
+  };
+
   const measure = {};
-  for (const id of ['none', 'soften', 'glow']) {
+  for (const id of ['none', 'soften', 'younger', 'glow']) {
     const filter = FILTERS.find((f) => f.id === id);
     if (!filter) continue;
-    const pixels = render(filter);
-    measure[id] = { grain: grain(pixels), edge: edge(pixels) };
+    const grainPixels = render(filter, grainCard);
+    const linePixels = render(filter, lineCard);
+    measure[id] = {
+      grain: grain(grainPixels),
+      edge: edge(grainPixels),
+      wrinkle: LINE_ROWS.reduce((total, row) => total + lineDepth(linePixels, row, 2), 0) / LINE_ROWS.length,
+      lash: lineDepth(linePixels, LASH_ROW, 7)
+    };
   }
   return measure;
 });
@@ -242,20 +304,28 @@ if (!behaviour) {
   behaviourProblems.push('could not measure the smoothing lenses');
 } else {
   const base = behaviour.none;
-  // Soften has to remove most of the texture and keep the edge; Glow is a
-  // softer soft-focus, so it is held to a lower bar.
-  for (const [id, minimumSmoothing] of [['soften', 0.5], ['glow', 0.25]]) {
+  // [id, min texture removed, min fine lines removed, min edge kept, min lash kept]
+  const bars = [
+    ['soften', 0.5, 0.3, 0.9, 0.75],
+    ['younger', 0.55, 0.5, 0.85, 0.65],
+    ['glow', 0.25, 0.0, 0.9, 0.5]
+  ];
+  for (const [id, minGrain, minWrinkle, minEdge, minLash] of bars) {
     const result = behaviour[id];
     if (!result) continue;
     const smoothing = 1 - result.grain / base.grain;
+    const lines = 1 - result.wrinkle / base.wrinkle;
     const retention = result.edge / base.edge;
-    console.log(`${id}: ${(smoothing * 100).toFixed(0)}% less texture, ${(retention * 100).toFixed(0)}% of the edge contrast kept`);
-    if (smoothing < minimumSmoothing) {
-      behaviourProblems.push(`${id} only removes ${(smoothing * 100).toFixed(0)}% of the texture (wanted ${minimumSmoothing * 100}%)`);
-    }
-    if (retention < 0.9) {
-      behaviourProblems.push(`${id} loses the edge: ${(retention * 100).toFixed(0)}% contrast retained`);
-    }
+    const lash = result.lash / base.lash;
+    console.log(
+      `${id}: ${(smoothing * 100).toFixed(0)}% less texture, ` +
+      `${(lines * 100).toFixed(0)}% of fine lines gone, ` +
+      `${(retention * 100).toFixed(0)}% edge contrast and ${(lash * 100).toFixed(0)}% lash contrast kept`
+    );
+    if (smoothing < minGrain) behaviourProblems.push(`${id} removes only ${(smoothing * 100).toFixed(0)}% of the texture (wanted ${minGrain * 100}%)`);
+    if (lines < minWrinkle) behaviourProblems.push(`${id} removes only ${(lines * 100).toFixed(0)}% of the fine lines (wanted ${minWrinkle * 100}%)`);
+    if (retention < minEdge) behaviourProblems.push(`${id} loses the hard edge: ${(retention * 100).toFixed(0)}% kept`);
+    if (lash < minLash) behaviourProblems.push(`${id} blurs the lash away: ${(lash * 100).toFixed(0)}% kept`);
   }
 }
 

@@ -14,7 +14,7 @@ There are two builds in this repository.
 | --- | --- | --- |
 | Install | Open the link, Add to Home Screen | Signed `.ipa`, ad hoc over the air |
 | Needs an Apple Developer account | No | Yes, $99/yr |
-| Filters | 32 WebGL lenses | ~60 Core Image lenses + face lenses |
+| Filters | 33 WebGL lenses | ~60 Core Image lenses + face lenses |
 | Where it runs | Any modern phone or desktop | iPhone, iOS 17+ |
 | Source | [`web/`](web) | [`Snappy/`](Snappy) |
 
@@ -46,11 +46,16 @@ there is no server in this app to send anything to.
 
 ## What the web app does
 
-- **Soften** — the one people actually reach for: an edge-aware blur that takes
-  about two thirds of the texture out of skin while eyes, lashes and lips stay
-  sharp, with a small lift and a touch of warmth. **Glow** is its soft-focus
-  sibling.
-- **25 shader lenses** in total, compiled as WebGL fragment shaders and swiped
+- **Soften** and **Younger** — the ones people actually reach for, sitting
+  first in the carousel. Both treat dark fine detail differently from light:
+  fine lines, pores and under-eye shadow are darker than the skin around them,
+  so those get crushed while highlights — the thing that makes skin look fresh
+  — are kept. Colour is evened out and redness pulled down separately from
+  luminance, so blotches go without softening any structure. Measured against a
+  synthetic skin card: Soften removes 65% of the texture and 63% of fine lines,
+  Younger 72% and 74%, both keeping ~99% of a hard edge and over 90% of a
+  lash. **Glow** is the soft-focus sibling.
+- **26 shader lenses** in total, compiled as WebGL fragment shaders and swiped
   through like a carousel: Noir, Thermal, X-Ray, Comic, Crystal, Hex, Halftone,
   Kaleido, Twirl, Bulge, Glitch, Duotone, Chrome and the rest.
 - **7 face lenses** — Big Eyes, Alien, Squish, Shades, Puppy, Royalty, Smitten —

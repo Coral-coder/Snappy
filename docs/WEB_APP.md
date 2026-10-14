@@ -30,17 +30,47 @@ the draw call to do this without the viewfinder flickering through a resize.
 
 ## Lenses
 
-`Soften` deserves a note, because it is the lens a filter camera is judged on
-and the one whose failure is silent. It is a cheap bilateral blur: three rings
-of samples, each weighted by how close it is in colour to the centre pixel, so
-flat areas average out while eyes, lashes, lips and the face's outline keep
-their contrast. The colour sigma is deliberately loose — tighten it and the
-filter starts protecting the very grain it exists to remove, which is exactly
-the bug the behaviour test in `scripts/test_shaders.mjs` guards against (it
-renders a noisy card with a hard edge and asserts the texture drops by half
-while the edge survives). A small fraction of the fine detail is mixed back so
-skin does not read as plastic, then a 4.5% lift and a trace of warmth, which is
-most of why these filters flatter.
+### Soften and Younger
+
+These two deserve a note: they are what a filter camera gets judged on, and
+their failure is silent — a mistuned one compiles, runs, and looks exactly like
+None.
+
+The base is a cheap bilateral blur: three rings of samples, each weighted by
+how close it is in colour to the centre pixel, so flat areas average out while
+eyes, lashes, lips and the face's outline keep their contrast. The colour sigma
+is deliberately loose; tighten it and the filter protects the very grain it
+exists to remove.
+
+What makes them read as *younger* rather than merely blurred is that the fine
+detail is treated asymmetrically. Lines, pores, crow's feet and under-eye
+shadow all sit **darker** than the skin around them, while highlights are what
+make skin look fresh. So the frame is split into structure and detail, and the
+dark half of the detail is crushed (down to 6% for Soften, 2% for Younger)
+while most of the light half is kept. Blurring both halves equally is what
+produces the plastic-mask look.
+
+Two more passes finish it: chroma is taken from the blurred frame and luma from
+the detail that was kept, so blotches and redness even out without softening
+any structure (red excess over green is pulled down further, which is what
+takes the heat out of a complexion); and the darker midtones get a lift, so
+hollows and the shadow side of a line fade while highlights stay put. Younger
+adds a little sheen in the highlights, a stronger shadow lift, and more
+aggressive colour evening.
+
+`scripts/test_shaders.mjs` measures all of this rather than trusting it. It
+renders two cards — one of heavy grain with a hard vertical edge, one of skin
+tone with thin shallow lines and one thick dark lash — and asserts that texture
+and fine lines drop while the edge and the lash survive. Current numbers:
+
+| Lens | Texture removed | Fine lines removed | Edge kept | Lash kept |
+| --- | --- | --- | --- | --- |
+| Soften | 65% | 63% | 99% | 97% |
+| Younger | 72% | 74% | 99% | 93% |
+| Glow | 41% | 54% | 101% | 62% |
+
+The first cut of Soften scored 29% on texture, because of exactly the
+sigma mistake described above. It compiled and it shipped nothing.
 
 `filters.js` is the catalogue: each lens is a GLSL function body,
 `vec3 snappy(vec2 uv)`, that gets a shared prelude prepended (sampling helpers,

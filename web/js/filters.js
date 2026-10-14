@@ -75,11 +75,11 @@ export const FILTERS = [
     body: `vec3 snappy(vec2 uv) {
       vec3 src = tex(uv);
 
-      // Edge-aware blur, three rings. A sample is weighted by how close it is
-      // in colour to the centre, so skin averages out while eyes, lashes, lips
-      // and the outline of the face stay put. The colour sigma is deliberately
-      // loose: tighten it and the filter starts protecting the very grain it
-      // is supposed to remove.
+      // Edge-aware blur, three rings. Samples are weighted by colour distance
+      // from the centre, so skin averages out while eyes, lashes, lips and the
+      // outline of the face keep their contrast. The colour sigma is loose on
+      // purpose: tighten it and the filter protects the grain it exists to
+      // remove.
       vec2 step = (u_res.y / 720.0) * 2.2 / u_res;
       vec3 sum = src;
       float total = 1.0;
@@ -94,12 +94,72 @@ export const FILTERS = [
       }
       vec3 blurred = sum / total;
 
-      // A little of the fine detail goes back, or skin reads as plastic.
-      vec3 result = blurred + (src - blurred) * 0.13;
+      // Split the frame into structure and fine detail, and treat the detail
+      // asymmetrically. Lines, pores and shadows sit DARKER than the skin
+      // around them; the highlights are what make skin look fresh. So crush
+      // the dark half of the detail and keep most of the light half, instead
+      // of blurring both and ending up with a plastic mask.
+      vec3 detail = src - blurred;
+      float darkness = 1.0 - smoothstep(-0.025, 0.025, luma(detail));
+      vec3 kept = detail * mix(0.34, 0.06, darkness);
 
-      // The lift and the touch of warmth are most of why these filters flatter.
-      result = clamp(result * 1.045 + vec3(0.014, 0.007, 0.0), 0.0, 1.0);
+      // Chroma from the blurred frame, luma from the detail we kept: blotches
+      // and redness even out without softening any actual structure.
+      float lum = luma(blurred) + luma(kept);
+      vec3 chroma = blurred - luma(blurred);
+      chroma.r -= max(chroma.r - chroma.g, 0.0) * 0.3;
+      vec3 result = lum + chroma * 0.95 + (kept - luma(kept)) * 0.5;
+
+      // Lift the darker midtones only: hollows and the shadow side of a line
+      // fade, highlights stay where they are.
+      result += (1.0 - smoothstep(0.0, 0.5, lum)) * 0.045;
+
+      result = clamp(result * 1.035 + vec3(0.012, 0.006, 0.0), 0.0, 1.0);
       return mix(src, result, 0.95);
+    }`
+  },
+  {
+    id: 'younger',
+    name: 'Younger',
+    glyph: '◒',
+    body: `vec3 snappy(vec2 uv) {
+      vec3 src = tex(uv);
+
+      // Soften, turned up: a wider blur, harder suppression of dark fine
+      // detail (fine lines, crow's feet, under-eye shadow), more evening of
+      // the colour, and a stronger lift in the shadows.
+      vec2 step = (u_res.y / 720.0) * 3.0 / u_res;
+      vec3 sum = src;
+      float total = 1.0;
+      for (int i = 0; i < 18; i++) {
+        float angle = float(i) * 0.3491 + 0.17;
+        float ring = i < 6 ? 1.0 : (i < 12 ? 2.1 : 3.4);
+        vec3 s = tex(uv + vec2(cos(angle), sin(angle)) * ring * step);
+        vec3 d = s - src;
+        float w = exp(-dot(d, d) * 7.0);
+        sum += s * w;
+        total += w;
+      }
+      vec3 blurred = sum / total;
+
+      vec3 detail = src - blurred;
+      float darkness = 1.0 - smoothstep(-0.03, 0.03, luma(detail));
+      vec3 kept = detail * mix(0.3, 0.02, darkness);
+
+      float lum = luma(blurred) + luma(kept);
+      vec3 chroma = blurred - luma(blurred);
+      chroma.r -= max(chroma.r - chroma.g, 0.0) * 0.45;
+      vec3 result = lum + chroma * 0.9 + (kept - luma(kept)) * 0.4;
+
+      result += (1.0 - smoothstep(0.0, 0.58, lum)) * 0.075;
+
+      // A trace of bloom in the highlights reads as healthy skin rather than
+      // a flat retouch.
+      float sheen = smoothstep(0.62, 1.0, lum);
+      result += sheen * 0.05;
+
+      result = clamp(result * 1.05 + vec3(0.018, 0.01, 0.002), 0.0, 1.0);
+      return mix(src, result, 0.97);
     }`
   },
   {
