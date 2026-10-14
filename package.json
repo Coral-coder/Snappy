@@ -1,0 +1,17 @@
+{
+  "name": "snappy-web",
+  "private": true,
+  "type": "module",
+  "description": "Checks and browser tests for the Snappy web app. The app itself has no build step.",
+  "scripts": {
+    "check": "node scripts/check_web.mjs",
+    "test:shaders": "node scripts/test_shaders.mjs",
+    "test:app": "node scripts/test_app.mjs",
+    "test": "npm run check && npm run test:shaders && npm run test:app",
+    "serve": "npx --yes http-server web -p 8080 -c-1",
+    "icons": "python3 scripts/make_web_icons.py"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

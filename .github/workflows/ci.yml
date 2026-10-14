@@ -11,8 +11,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  web:
+    name: Web app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check the app shell holds together
+        run: node scripts/check_web.mjs
+
+      - name: Install a browser to test against
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Compile every lens shader
+        run: node scripts/test_shaders.mjs
+
+      - name: Drive the app with a fake camera
+        run: node scripts/test_app.mjs
+
   build-and-test:
-    name: Build & test (simulator)
+    name: Native build & test (simulator)
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4

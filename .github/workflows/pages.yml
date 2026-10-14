@@ -1,0 +1,81 @@
+name: Pages
+
+# Publishes the web app. Every push that touches web/ redeploys it, so the
+# home-screen app updates itself the next time it is opened.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/pages.yml'
+      - 'scripts/check_web.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build & publish
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check the app shell holds together
+        run: node scripts/check_web.mjs
+
+      - name: Install a browser to test against
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Compile every lens shader
+        # A lens that will not compile is a black viewfinder on a phone, so this
+        # gates the deploy rather than being discovered after it.
+        run: node scripts/test_shaders.mjs
+
+      - name: Drive the app with a fake camera
+        run: node scripts/test_app.mjs
+
+      - name: Stamp this commit into the cache name
+        # Changing the cache name is what makes a returning phone pick up the new
+        # build instead of serving the old one out of the service worker.
+        run: |
+          sed -i "s/const VERSION = 'snappy-v1';/const VERSION = 'snappy-${GITHUB_SHA::12}';/" web/sw.js
+          grep -n "const VERSION" web/sw.js
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Publish
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Summary
+        run: |
+          {
+            echo "### Snappy web app"
+            echo ""
+            echo "${{ steps.deploy.outputs.page_url }}"
+            echo ""
+            echo "Open it in Safari on the iPhone, then Share → Add to Home Screen."
+          } >> "$GITHUB_STEP_SUMMARY"

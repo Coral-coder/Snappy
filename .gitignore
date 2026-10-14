@@ -28,3 +28,7 @@ xcuserdata/
 *.cer
 *.mobileprovision
 *.certSigningRequest
+
+# Node tooling for the web app checks (the app itself has no dependencies).
+node_modules/
+package-lock.json

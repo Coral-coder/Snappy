@@ -1,6 +1,10 @@
-# Installing Snappy without TestFlight
+# Installing the native build without TestFlight
 
-Snappy ships as an **ad hoc** build: a signed `.ipa` served from a web page, which
+> Looking for the easy path? The [web app](WEB_APP.md) installs to the home
+> screen with no Apple account, no certificate and no device registration.
+> This page is only for the native iOS build.
+
+The native app ships as an **ad hoc** build: a signed `.ipa` served from a web page, which
 iOS installs over the air. No TestFlight, no App Review, no 24-hour wait for a
 build to process.
 
@@ -15,12 +19,11 @@ echo 0.1.1 > VERSION && git commit -am "0.1.1" && git push
 GitHub Actions (.github/workflows/adhoc-release.yml)
   ├─ imports your certificate + profile into a throwaway keychain
   ├─ xcodebuild archive → xcodebuild -exportArchive (method: release-testing)
-  ├─ writes manifest.plist (itms-services) + an install page
-  ├─ publishes both, plus the .ipa, to GitHub Pages
-  └─ attaches the .ipa to a GitHub Release
+  ├─ writes manifest.plist (itms-services)
+  └─ publishes the .ipa and the manifest as Release assets
         │
         ▼
-Open the Pages URL in Safari on the iPhone → Install
+Open /install/ in Safari on the iPhone → Install
 ```
 
 ## One-time setup, the short way
@@ -84,17 +87,15 @@ In **Settings → Secrets and variables → Actions**, add:
 The bundle id and team id are read out of the profile at build time, so they are
 not secrets you have to keep in sync.
 
-### 5. Let the workflow publish Pages
+### 5. Nothing — the install page is already published
 
-The workflow asks GitHub to enable Pages on the first run
-(`actions/configure-pages` with `enablement: true`). If your account cannot
-enable it automatically, turn it on manually: **Settings → Pages → Source:
-GitHub Actions**.
+`/install/` ships with the web app on GitHub Pages and points at
+`releases/latest/download/manifest.plist`, so it always offers the newest build
+without being rebuilt.
 
-> Pages sites are publicly readable, including for private repositories on plans
-> where Pages is available. Anyone with the URL can download the `.ipa` — they
-> just cannot install it unless their device is in the profile. If that is not
-> acceptable, see "Keeping the build private" below.
+> Release assets on a public repository are publicly downloadable. Anyone with
+> the URL can fetch the `.ipa` — they just cannot install it unless their device
+> is in the profile. If that is not acceptable, see "Keeping the build private".
 
 ## Making a build
 
@@ -123,9 +124,9 @@ browser), tap Install, and the app appears on the home screen.
 The Pages route trades privacy for convenience. Alternatives, in rough order of
 effort:
 
-- **Release assets only.** Drop the Pages steps and attach the `.ipa` to a
-  private Release. Installing then means Apple Configurator or Xcode's Devices
-  window over USB — no OTA link.
+- **A private repository.** Release assets then need authentication, which
+  `itms-services` cannot provide, so installing means Apple Configurator or
+  Xcode's Devices window over USB — no OTA link.
 - **Your own HTTPS host.** Any static host works; the requirement is only that
   the manifest and the `.ipa` are both HTTPS, and the manifest is reachable from
   the device. `scripts/make_ota_manifest.sh` takes the URL as an argument.

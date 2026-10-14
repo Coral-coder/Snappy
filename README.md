@@ -2,97 +2,111 @@
 
 A camera app for filters. That is the whole product.
 
-No feed, no friends list, no streaks, no account, no ads, no analytics, no
-network calls. You open it, you get a viewfinder with a filter carousel, you take
-a photo or hold for video, and it lands in the app's own roll. Sharing is the
-system share sheet — so Instagram, Messages, AirDrop, whatever the OS offers —
-and it only happens when you tap Share.
+No feed, no friends list, no streaks, no account, no ads, no analytics. You open
+it, you get a viewfinder with a filter carousel, you take a photo or hold for
+video, and it lands in your own roll. Sharing is the system share sheet — so
+Instagram, Messages, AirDrop, Save Image, whatever the OS offers — and only when
+you tap Share.
 
-## Where the filters come from
+There are two builds in this repository.
 
-| Source | Status | Notes |
+| | Web app | Native iOS app |
 | --- | --- | --- |
-| **iOS Core Image library** | shipped | Enumerated from the OS at runtime, not hard-coded. Roughly 40–60 usable looks: Noir, Comic, Thermal, X-Ray, Crystallize, Pixellate, Kaleidoscope, halftones, distortions… |
-| **Snappy face lenses** | shipped | Vision face tracking plus Core Graphics art: Shades, Puppy, Royalty, Smitten, Big Eyes, Alien, Squish. |
-| **Snap Camera Kit** (real Snapchat Lenses) | adapter included, off by default | Needs a Snap developer account, an API token and lens groups. See [docs/CAMERA_KIT.md](docs/CAMERA_KIT.md). |
+| Install | Open the link, Add to Home Screen | Signed `.ipa`, ad hoc over the air |
+| Needs an Apple Developer account | No | Yes, $99/yr |
+| Filters | 30 WebGL lenses | ~60 Core Image lenses + face lenses |
+| Where it runs | Any modern phone or desktop | iPhone, iOS 17+ |
+| Source | [`web/`](web) | [`Snappy/`](Snappy) |
 
-Worth saying plainly: **there is no public API that hands an app the Snapchat
-public lens catalogue.** Snap's Camera Kit is the only supported route to real
-Snap AR Lenses, it is commercial, and what you get is the lens *groups* you
-configure — not a mirror of Snapchat. Extracting lens bundles out of the
-Snapchat app would break Snap's terms, so this app does not do that. The
-built-in providers are what make it useful on day one; Camera Kit is the seam
-for when you have credentials.
+**The web app is the one you can have right now.** Apple gates native installs
+behind a paid account and device registration; a home-screen web app needs none
+of it.
 
-## Getting it running
+## Install the web app
 
-Needs a Mac with Xcode 16 and an iPhone (the camera does not exist in the
-simulator, though the app builds and the tests run there).
+On the iPhone, open the site in **Safari**:
+
+```
+https://coral-coder.github.io/Snappy/
+```
+
+Tap the Share button, then **Add to Home Screen**. It then launches full screen
+with its own icon, no browser chrome, and works with no connection.
+
+The first launch asks for camera access. Everything after that is local: frames
+are filtered on the GPU in your browser, captures go into on-device storage, and
+there is no server in this app to send anything to.
+
+## What the web app does
+
+- **30 lenses**, compiled as WebGL fragment shaders and swiped through like a
+  carousel: Noir, Thermal, X-Ray, Comic, Crystal, Hex, Halftone, Kaleido, Twirl,
+  Bulge, Glitch, Duotone, Chrome and the rest.
+- **7 face lenses** — Big Eyes, Alien, Squish, Shades, Puppy, Royalty, Smitten —
+  tracked with MediaPipe face landmarks.
+- **Photos at full camera resolution**, not screen resolution: the shutter
+  re-renders the identical pipeline at the sensor's size.
+- **Hold-to-record video** with audio, where the browser supports it.
+- **An on-device roll** in IndexedDB, with share, download and delete.
+- **Pinch to zoom**, swipe to change lens, tap for a photo.
+- **Offline**: a service worker precaches the whole app shell.
+
+## Honest limits of the web build
+
+- **Video recording depends on the browser.** Recording a canvas needs
+  `MediaRecorder` plus `captureStream`; older iOS versions have one or neither.
+  Snappy feature-detects it and hides the hold-to-record hint when it is
+  missing. Photos always work.
+- **Face lenses download a tracking model the first time you pick one** (a few MB
+  from a CDN). After that the service worker keeps it offline. With no
+  connection on first use, those lenses hide themselves and the other 23 carry
+  on.
+- **Saving to the camera roll goes through the share sheet** — the web has no
+  direct write to Photos. Share → Save Image.
+- **iOS can clear site data** for a web app left unused for a long stretch.
+  Anything you want to keep, share or download out of Snappy.
+- **No sensor-level control.** Torch, manual focus and true optical zoom are not
+  exposed to web pages on iOS; zoom here is digital, done in the shader.
+
+## The native app
+
+Still here, still builds, and gives you the things the web cannot: Core Image's
+whole system filter library enumerated at runtime, Vision face tracking, and
+`AVAssetWriter` recording. It needs a paid Apple Developer account to reach a
+phone.
 
 ```bash
-make bootstrap   # installs XcodeGen, generates Snappy.xcodeproj
-make open        # opens it in Xcode
+make bootstrap      # XcodeGen + generate Snappy.xcodeproj
+make open           # Xcode
+scripts/setup_signing.sh   # one command for certificate, profile, CI secrets
 ```
 
-Before building to a device, create `Config/Local.xcconfig` (gitignored):
-
-```
-SNAPPY_BUNDLE_ID = com.yourname.snappy
-SNAPPY_TEAM_ID = ABCDE12345
-```
-
-`make test` runs the unit tests on a simulator.
-
-## Getting it onto a phone, without TestFlight
-
-Once, to set up signing (Apple only lets your own account create a signing
-certificate, so this part cannot be automated away entirely — but it is one
-command and three clicks):
-
-```bash
-scripts/setup_signing.sh
-```
-
-It generates the key, walks you through the three Apple pages, builds the `.p12`
-and uploads all three GitHub secrets for you.
-
-After that, bump `VERSION` on `main` and push. GitHub Actions builds a signed ad hoc `.ipa`,
-publishes an over-the-air install page, and attaches the build to a Release
-(tagging it for you):
-
-```bash
-echo 0.1.1 > VERSION && git commit -am "0.1.1" && git push
-```
-
-Open the install page in Safari on the iPhone and tap Install. The device's UDID
-has to be in the ad hoc provisioning profile first — Apple's rule, not ours.
-Full setup, the three secrets it needs, and the alternatives (own host,
-Enterprise programme, sideloading) are in
-[docs/AD_HOC_DISTRIBUTION.md](docs/AD_HOC_DISTRIBUTION.md).
+Then bump `VERSION` on `main` and push: CI builds a signed ad hoc `.ipa`,
+attaches it to a Release, and
+[`/install/`](https://coral-coder.github.io/Snappy/install/) installs it over the
+air. Details in [docs/AD_HOC_DISTRIBUTION.md](docs/AD_HOC_DISTRIBUTION.md).
 
 ## Layout
 
 ```
-Snappy/
-  App/         entry point and routing
-  Camera/      AVCaptureSession, frame pipeline, recorder, view model
-  Filters/     lens protocol, Core Image provider, face lenses, Camera Kit seam
-  Rendering/   Metal-backed viewfinder and the shared CIContext
-  Capture/     on-device roll, thumbnails, save-to-Photos
-  Sharing/     the share sheet, which is all the "social" there is
-  UI/          camera, carousel, gallery, settings
-scripts/       signing, export options, OTA manifest, install page, app icon
-docs/          architecture, ad hoc distribution, Camera Kit
+web/                 the web app — no build step, the browser loads the modules
+  js/renderer.js     WebGL pipeline: video → lens shader → canvas
+  js/filters.js      the lens catalogue, as shader source
+  js/faces.js        MediaPipe landmarks, loaded on demand
+  js/overlays.js     Canvas 2D art for the face lenses
+  sw.js              offline shell
+Snappy/              the native iOS app (SwiftUI + AVFoundation + Core Image)
+scripts/             icon generation, web checks, iOS signing and packaging
+docs/                architecture, web app notes, ad hoc distribution, Camera Kit
 ```
 
-Design notes and the reasoning behind the frame path are in
+Design notes: [docs/WEB_APP.md](docs/WEB_APP.md) and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Deliberate limits
 
 - Portrait only. A filter app that fights you about rotation is not a better app.
 - Videos are capped at 60 seconds.
-- Photos are grabbed from the live filtered frame, so they are at video
-  resolution (1080p) rather than the sensor's full still resolution. That is the
-  price of the preview being exactly truthful; it is a defensible trade for a
-  filter app and a bad one for a photography app.
+- Photos match the viewfinder exactly, which is the point: both builds filter
+  each frame once and send that same frame to the screen, the recorder and the
+  encoder, so the preview can never lie about the result.

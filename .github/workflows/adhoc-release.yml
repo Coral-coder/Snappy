@@ -26,8 +26,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: adhoc
@@ -37,9 +35,6 @@ jobs:
   build:
     name: Archive & export
     runs-on: macos-15
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -122,55 +117,31 @@ jobs:
             -exportPath build/export
           ls -lh build/export
 
-      - name: Configure GitHub Pages
-        id: pages
-        uses: actions/configure-pages@v5
-        with:
-          # Turns Pages on the first time, so the only manual setup is the secrets.
-          enablement: true
-
-      - name: Assemble the install site
-        env:
-          NOTES: ${{ github.event.inputs.notes }}
+      - name: Assemble the release payload
         run: |
-          BASE_URL="${{ steps.pages.outputs.base_url }}"
           mkdir -p site
           cp build/export/*.ipa site/Snappy.ipa
 
+          # Release assets have a stable "latest" URL, so the install page on the
+          # Pages site can point at it without being rebuilt for every version.
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download"
           scripts/make_ota_manifest.sh \
             "$PROFILE_BUNDLE_ID" \
             "${{ steps.version.outputs.version }}" \
             "Snappy" \
-            "${BASE_URL}/Snappy.ipa" \
+            "${BASE}/Snappy.ipa" \
             site/manifest.plist
-
-          scripts/make_install_page.sh \
-            site \
-            "${{ steps.version.outputs.version }}" \
-            "${{ steps.version.outputs.build }}" \
-            "${BASE_URL}/manifest.plist" \
-            "${BASE_URL}/Snappy.ipa" \
-            "$NOTES"
-
-      - name: Upload the Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-      - name: Publish to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
 
       - name: Publish a release with the .ipa
         env:
           GH_TOKEN: ${{ github.token }}
           NOTES: ${{ github.event.inputs.notes }}
         run: |
-          BASE_URL="${{ steps.pages.outputs.base_url }}"
+          INSTALL_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/install/"
           BODY=$(cat <<BODY
           Ad hoc build ${{ steps.version.outputs.version }} (${{ steps.version.outputs.build }}).
 
-          **[Install on an iPhone](${BASE_URL})** — open that page in Safari on the device.
+          **[Install on an iPhone](${INSTALL_URL})** — open that page in Safari on the device.
           The device UDID has to be in the ad hoc provisioning profile first.
 
           ${NOTES}
@@ -187,8 +158,7 @@ jobs:
               site/Snappy.ipa site/manifest.plist \
               --target "$GITHUB_SHA" \
               --title "Snappy ${{ steps.version.outputs.version }}" \
-              --notes "$BODY" \
-              --prerelease
+              --notes "$BODY"
           fi
 
       - name: Summary
@@ -196,7 +166,7 @@ jobs:
           {
             echo "### Snappy ${{ steps.version.outputs.version }}"
             echo ""
-            echo "Install page: ${{ steps.pages.outputs.base_url }}"
+            echo "Install page: https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/install/"
             echo ""
             echo "Open it in Safari on a device whose UDID is in the profile."
           } >> "$GITHUB_STEP_SUMMARY"

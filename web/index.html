@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Snappy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="description" content="A camera with filters. No feed, no account, no ads.">
+
+<!-- iOS home-screen behaviour: full screen, dark status bar, our icon. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Snappy">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<main id="viewfinder">
+  <canvas id="stage"></canvas>
+
+  <div id="permission" class="overlay" hidden>
+    <div class="card">
+      <h1>Snappy needs the camera</h1>
+      <p id="permission-detail">Allow camera access to see the viewfinder.</p>
+      <button id="permission-retry" class="primary">Allow camera</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <header id="top-bar">
+    <span id="rec-badge" class="rec" hidden><i></i><span id="rec-time">00:00</span></span>
+    <span class="spacer"></span>
+    <button id="flip" class="round" aria-label="Switch camera">&#8635;</button>
+    <button id="settings-open" class="round" aria-label="About Snappy">i</button>
+  </header>
+
+  <footer id="bottom-bar">
+    <div id="carousel" class="carousel" role="tablist" aria-label="Filters"></div>
+    <div class="shutter-row">
+      <button id="gallery-open" class="thumb" aria-label="Open your shots"></button>
+      <button id="shutter" aria-label="Take photo. Hold to record video.">
+        <span class="ring"></span><span class="core"></span>
+      </button>
+      <span id="hold-hint" class="hint">Hold to<br>record</span>
+    </div>
+  </footer>
+</main>
+
+<section id="gallery" class="sheet" hidden>
+  <header>
+    <h2>Your shots</h2>
+    <button id="gallery-close" class="text">Done</button>
+  </header>
+  <div id="gallery-grid" class="grid"></div>
+  <p id="gallery-empty" class="empty">Nothing yet. Photos and videos you take show up here, on this device only.</p>
+</section>
+
+<section id="viewer" class="sheet dark" hidden>
+  <header>
+    <button id="viewer-close" class="round">&times;</button>
+    <span class="spacer"></span>
+  </header>
+  <div id="viewer-stage"></div>
+  <div class="actions">
+    <button id="viewer-share" class="action"><span>&#8679;</span>Share</button>
+    <button id="viewer-save" class="action"><span>&#8681;</span>Save</button>
+    <button id="viewer-delete" class="action danger"><span>&#9003;</span>Delete</button>
+  </div>
+</section>
+
+<section id="settings" class="sheet" hidden>
+  <header>
+    <h2>Snappy</h2>
+    <button id="settings-close" class="text">Done</button>
+  </header>
+  <div class="prose">
+    <p class="lede">A camera that applies filters. That is the whole product.</p>
+    <ul class="facts">
+      <li>No account, no feed, no ads, no analytics.</li>
+      <li>Frames never leave your phone. There is no server to send them to.</li>
+      <li>Shots are stored in this app on this device until you share or delete them.</li>
+    </ul>
+    <h3>Add to your home screen</h3>
+    <p>In Safari, tap the Share button, then <strong>Add to Home Screen</strong>. Snappy then opens full screen with its own icon, and works without a connection.</p>
+    <h3>Lenses</h3>
+    <ul id="lens-summary" class="facts"></ul>
+    <p id="face-status" class="muted"></p>
+    <h3>What this build can do on your device</h3>
+    <ul id="capability-list" class="facts"></ul>
+    <p class="muted" id="version-line"></p>
+  </div>
+</section>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
