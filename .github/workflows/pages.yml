@@ -3,13 +3,15 @@ name: Pages
 # Publishes the web app to GitHub Pages. Every push that touches web/ redeploys,
 # so the home-screen app picks up the new build the next time it is opened.
 #
-# This deploys by pushing the site to the `gh-pages` branch rather than using the
-# Pages deployment API, because creating a Pages site through the API needs
-# permissions the workflow token does not have on a repository that has never
-# had Pages turned on. Pushing a branch always works.
+# Pages must be turned on once by a repository admin — the workflow token is not
+# allowed to create a Pages site ("Resource not accessible by integration"), so
+# this cannot be automated. Settings → Pages → Source. Either choice works:
 #
-# If Pages is not serving yet: Settings → Pages → Source → "Deploy from a
-# branch" → gh-pages / (root). That is a one-time switch.
+#   "Deploy from a branch" → gh-pages / (root)   ← served by the branch push below
+#   "GitHub Actions"                             ← served by the deployment below
+#
+# The job publishes both ways, so whichever source is selected, the site is
+# live. The path that does not match the configured source fails harmlessly.
 
 on:
   push:
@@ -24,6 +26,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
@@ -80,6 +84,27 @@ jobs:
           # The deploy branch is a snapshot, not history: one commit, force-pushed.
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" gh-pages
 
+      # Second route: the Pages deployment API. This only works once Pages is set
+      # to "GitHub Actions" as its source, so every step of it is allowed to fail
+      # without failing the job — the branch push above has already published.
+      - name: Configure Pages (only works on the GitHub Actions source)
+        id: pages
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+
+      - name: Upload the Pages artifact
+        if: steps.pages.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy through the Pages API
+        id: deploy
+        if: steps.pages.outcome == 'success'
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
       - name: Where it lives
         run: |
           URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
@@ -90,5 +115,9 @@ jobs:
             echo ""
             echo "Open that in Safari on the iPhone, then Share → Add to Home Screen."
             echo ""
-            echo "Not loading? Settings → Pages → Source → Deploy from a branch → gh-pages / (root)."
+            echo "Branch deploy: pushed gh-pages (${GITHUB_SHA::12})."
+            echo "Pages API deploy: ${{ steps.pages.outcome == 'success' && 'attempted' || 'skipped — source is not GitHub Actions' }}"
+            echo ""
+            echo "404? Pages is not enabled yet. Settings → Pages → Source →"
+            echo "\"Deploy from a branch\" → gh-pages → / (root) → Save. One time only."
           } >> "$GITHUB_STEP_SUMMARY"

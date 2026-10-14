@@ -30,6 +30,13 @@ On the iPhone, open the site in **Safari**:
 https://coral-coder.github.io/Snappy/
 ```
 
+> **First time only:** GitHub Pages has to be switched on by hand — a workflow
+> token is not permitted to create a Pages site. In the repository:
+> **Settings → Pages → Source → "Deploy from a branch" → `gh-pages` → `/ (root)`
+> → Save.** The branch is already built and pushed by CI; the switch just tells
+> GitHub to serve it. "GitHub Actions" works as a source too — the deploy
+> workflow publishes both ways.
+
 Tap the Share button, then **Add to Home Screen**. It then launches full screen
 with its own icon, no browser chrome, and works with no connection.
 

@@ -74,6 +74,28 @@ storage.
 
 ## Hosting
 
+### Turning Pages on (once)
+
+A workflow token cannot create a Pages site: `actions/configure-pages` with
+`enablement: true` returns *Resource not accessible by integration* on a
+repository that has never had Pages enabled. Someone with admin access has to
+do it once, in **Settings → Pages → Source**:
+
+- **Deploy from a branch → `gh-pages` → `/ (root)`** — served by the branch the
+  deploy workflow force-pushes.
+- **GitHub Actions** — served by the Pages deployment the same workflow also
+  attempts.
+
+The workflow publishes both ways on every run, so either setting works and
+neither has to be matched to the workflow. Whichever one is not configured
+fails harmlessly inside the job.
+
+Diagnosing it from outside: when Pages is enabled with a branch source, GitHub
+registers its own `pages-build-deployment` workflow in the Actions tab. If the
+only workflows listed are this repository's own, Pages has never been turned on.
+
+### What gets served
+
 GitHub Pages serves `web/` verbatim — there is no build step and no bundler, so
 what is in the repository is what runs. Every path is relative because project
 Pages sites live under `/<repo>/`.
