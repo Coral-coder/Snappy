@@ -1,0 +1,20 @@
+{
+  "name": "Snappy — camera filters",
+  "short_name": "Snappy",
+  "description": "A camera that applies filters. No feed, no account, no ads.",
+  "start_url": "./",
+  "scope": "./",
+  "id": "snappy-camera",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen"],
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": ["photo", "entertainment"],
+  "icons": [
+    { "src": "icons/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
